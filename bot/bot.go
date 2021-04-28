@@ -1,6 +1,14 @@
 package bot
 
-import "github.com/bwmarrin/discordgo"
+import (
+	"regexp"
+
+	"github.com/bwmarrin/discordgo"
+)
+
+var (
+	UserIDRegex = `<@!(\d{18})>`
+)
 
 type Bot interface {
 	Connect() error
@@ -25,11 +33,6 @@ func (d *DiscordBot) Connect() error {
 	return err
 }
 
-func (d *DiscordBot) SendMessage(c string, msg string) error {
-	_, err := d.Session.ChannelMessageSend(c, msg)
-	return err
-}
-
 func (d *DiscordBot) RegisterHandler(handler func(s *discordgo.Session, m *discordgo.MessageCreate)) {
 	d.Session.AddHandler(handler)
 }
@@ -37,4 +40,9 @@ func (d *DiscordBot) RegisterHandler(handler func(s *discordgo.Session, m *disco
 func NewDiscordBot(token string) *DiscordBot {
 	ds, _ := discordgo.New("Bot " + token)
 	return &DiscordBot{token: token, Session: ds}
+}
+
+func ValidUserId(userid string) bool {
+	var validUserID = regexp.MustCompile(UserIDRegex)
+	return validUserID.MatchString(userid)
 }

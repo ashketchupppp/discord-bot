@@ -1,34 +1,72 @@
 package main
 
 import (
-	"errors"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/ashketchupppp/discord-bot/bot"
+	"github.com/ashketchupppp/discord-bot/db"
 	"github.com/bwmarrin/discordgo"
-	"github.com/mattn/go-shellwords"
 )
 
 var (
-	token string
+	configPath        string
+	defaultConfigPath = "./.bot.conf.json"
+	defaultConfig     = &Config{
+		Token:     "CHANGE ME",
+		DbConnStr: "mongodb://localhost:27017",
+	}
 )
 
+type Config struct {
+	Token     string
+	DbConnStr string
+}
+
 func init() {
-	flag.StringVar(&token, "token", "", "Discord bot token")
+	flag.StringVar(&configPath, "configPath", defaultConfigPath, "Path to the configuration file.")
 }
 
 func main() {
 	flag.Parse()
+	// look for configuration file and read it
+	fileBytes, err := ioutil.ReadFile(configPath)
+	if err != nil {
+		fmt.Print("Unable to find the config file at '", configPath, "'. Creating a new one in '", defaultConfigPath, "'")
+		defaultConfigStr, _ := json.Marshal(defaultConfig)
+		e := ioutil.WriteFile(defaultConfigPath, defaultConfigStr, 0)
+		if e != nil {
+			panic(e)
+		}
+		return
+	}
 
-	session, err := discordgo.New("Bot " + token)
+	var conf *Config
+	err = json.Unmarshal(fileBytes, &conf)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Establish mongodb connection
+	db, err := db.NewBotDB(conf.DbConnStr)
 	if err != nil {
 		panic(err)
 	}
-	session.AddHandler(NewMessageHandler)
+	bot.SetDatabase(db)
+
+	// Establish discord bot connection
+	session, err := discordgo.New("Bot " + conf.Token)
+	if err != nil {
+		panic(err)
+	}
+
+	// Setup discord event handlers
+	session.AddHandler(bot.NewMessageHandler)
 
 	err = session.Open()
 	if err != nil {
@@ -43,37 +81,4 @@ func main() {
 
 	// Cleanly close down the Discord session.
 	session.Close()
-}
-
-func GetCommand(cmd string) (bot.Command, error) {
-	args, err := shellwords.Parse(cmd)
-	if err != nil {
-		return nil, err
-	} else {
-		if cmd, ok := bot.Commands[args[0]]; ok {
-			fs := cmd.FlagSet()
-			err := fs.Parse(args[1:])
-			if err != nil {
-				return nil, err
-			}
-			return cmd, nil
-		}
-	}
-	return nil, errors.New("unable to find command")
-}
-
-func NewMessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if m.Author.ID == s.State.User.ID || m.Content[0] != '/' {
-		return
-	}
-	m.Content = m.Content[1:]
-	cmd, err := GetCommand(m.Content)
-	if err != nil {
-		s.ChannelMessageSend(m.ChannelID, err.Error())
-		return
-	}
-	err = cmd.Run(s, m.Message)
-	if err != nil {
-		s.ChannelMessageSend(m.ChannelID, err.Error())
-	}
 }
