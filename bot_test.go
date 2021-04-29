@@ -14,8 +14,8 @@ func TestCanAddHandler(t *testing.T) {
 */
 
 // Tests that the Load method is able to load valid JSON data from a reader into a struct
-func TestLoadConfigValidData(t *testing.T) {
-	reader := strings.NewReader(`{"Token" : "atoken", "DbConnStr" : "dbconnstr"}`)
+func TestBotLoadValidData(t *testing.T) {
+	reader := strings.NewReader(`{"Token" : "atoken", "mongoDatabase" : {"connstr" : "test"}}`)
 	b := &DiscordBot{}
 	err := b.Load(reader)
 	if err != nil {
@@ -26,14 +26,17 @@ func TestLoadConfigValidData(t *testing.T) {
 	if b.Token != "atoken" {
 		t.Errorf("b.Token != \"atoken\"")
 	}
-	if b.DbConnStr != "dbconnstr" {
-		t.Errorf("b.DbConnStr != \"dbconnstr\"")
+	if b.MongoDatabase == nil {
+		t.Errorf("b.MongoDatabase == nil")
+	}
+	if b.MongoDatabase.ConnStr != "test" {
+		t.Errorf("b.MongoDatabase.ConnStr != test")
 	}
 }
 
 // Tests that the Load method is able to load valid JSON data from a reader into a struct
-func TestLoadConfigMissingDataCausesInvalid(t *testing.T) {
-	reader := strings.NewReader(`{"DbConnStr" : "dbconnstr"}`)
+func TestBotLoadMissingDataCausesInvalid(t *testing.T) {
+	reader := strings.NewReader(`{}`)
 	b := &DiscordBot{}
 	err := b.Load(reader)
 	if err != nil {

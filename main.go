@@ -8,16 +8,26 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
-	"github.com/bwmarrin/discordgo"
 )
+
+var singleDiscordBot = &DiscordBot{}
 
 var (
 	configPath        string
 	defaultConfigPath = "./.bot.conf.json"
 	defaultConfig     = &DiscordBot{
-		Token:     "CHANGE ME",
-		DbConnStr: "CHANGE ME",
+		Token: "CHANGE ME",
+		MongoDatabase: &MongoDB{
+			DBName:          "discordbot",
+			QuoteCollection: "quotes",
+			ConnStr:         "CHANGE ME",
+		},
+		EnabledCommands: []string{
+			"help",
+			"addquote",
+			"getquote",
+		},
+		CommandPrefix: "$",
 	}
 )
 
@@ -40,33 +50,22 @@ func main() {
 	}
 
 	// We have a config file, read it and validate the discordBot is setup correctly
-	var discordBot *DiscordBot
-	err = discordBot.Load(file)
+	err = singleDiscordBot.Load(file)
 	if err != nil {
 		panic(err.Error())
 	}
-	err = discordBot.Validate()
+	err = singleDiscordBot.Validate()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	// Establish mongodb connection
-	db, err := NewBotDB(discordBot.DbConnStr)
-	if err != nil {
-		panic(err)
-	}
-	SetDatabase(db)
-
-	// Establish discord bot connection
-	session, err := discordgo.New("Bot " + discordBot.Token)
+	// Initialise our discord bot
+	err = singleDiscordBot.Initialise()
 	if err != nil {
 		panic(err)
 	}
 
-	// Setup discord event handlers
-	session.AddHandler(NewMessageHandler)
-
-	err = session.Open()
+	err = singleDiscordBot.Connect()
 	if err != nil {
 		panic(err)
 	}
@@ -78,5 +77,13 @@ func main() {
 	<-sc
 
 	// Cleanly close down the Discord session.
-	session.Close()
+	singleDiscordBot.Disconnect()
+}
+
+// Returns the discord bot currently in use
+// This is needed for things like discord event handlers which need access to the
+// SingleDiscordBot struct, but can't be passed extra function parameters due to the limitation
+// discordgo places on discord event handlers.
+func GetDiscordBot() *DiscordBot {
+	return singleDiscordBot
 }

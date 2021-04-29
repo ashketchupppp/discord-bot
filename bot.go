@@ -3,10 +3,13 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"regexp"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/mattn/go-shellwords"
 )
 
 var (
@@ -15,43 +18,61 @@ var (
 
 type Bot interface {
 	Connect() error
-	Close() error
+	Disconnect() error
 	RegisterListener(s *discordgo.Session, m *discordgo.MessageCreate) error
 	SendMessage(c string, msg string) error
+	Database() *BotDatabase
+	ParseCommand() (*Command, error)
+	GetCommand() (*Command, error)
 }
 
 // Stores the state of the entire application
 type DiscordBot struct {
-	Session   *discordgo.Session
-	Token     string
-	DbConnStr string
+	Session       *discordgo.Session
+	Token         string
+	MongoDatabase *MongoDB
+	CommandPrefix string
+
+	EnabledCommands   []string
+	availableCommands map[string]Command
 }
 
 // Closes the discord session
-func (d *DiscordBot) Close() error {
+func (d *DiscordBot) Disconnect() error {
 	err := d.Session.Close()
 	return err
 }
 
 // Opens the discord session
-func (d *DiscordBot) Connect() error {
-	err := d.Session.Open()
+func (b *DiscordBot) Connect() error {
+	err := b.Session.Open()
 	return err
 }
 
 // Registers a function handler with the discord session
-func (d *DiscordBot) RegisterHandler(handler func(s *discordgo.Session, m *discordgo.MessageCreate)) {
-	d.Session.AddHandler(handler)
+func (b *DiscordBot) RegisterHandler(handler func(s *discordgo.Session, m *discordgo.MessageCreate)) {
+	b.Session.AddHandler(handler)
 }
 
-func NewDiscordBot(token string) *DiscordBot {
-	ds, _ := discordgo.New("Bot " + token)
-	return &DiscordBot{Token: token, Session: ds}
+func (b *DiscordBot) SendError(e error, chanID string, s *discordgo.Session) {
+	b.SendMessage(fmt.Sprint("```", e.Error(), "\nfor help, use $help", "```"), chanID, s)
+}
+
+func (b *DiscordBot) SendMessage(msg, chanID string, s *discordgo.Session) {
+	s.ChannelMessageSend(chanID, msg)
 }
 
 func ValidUserId(userid string) bool {
 	var validUserID = regexp.MustCompile(UserIDRegex)
 	return validUserID.MatchString(userid)
+}
+
+// Returns a database to use
+func (b *DiscordBot) Database() (BotDatabase, error) {
+	if b.MongoDatabase != nil {
+		return b.MongoDatabase, nil
+	}
+	return nil, errors.New("unable to determine database to use")
 }
 
 // Reads reader r and attempts to decode it as JSON.
@@ -65,13 +86,131 @@ func (b *DiscordBot) Load(r io.Reader) error {
 	return nil // success!
 }
 
-// Checks the values in b to see if b is setup correctly, not everything is checked, only the important stuff
+// Checks the values in b to see if b is setup correctly,
+// all Validatable objects the DiscordBot stores will also be validated
 func (b *DiscordBot) Validate() error {
+	var err error
 	if b.Token == "" {
-		return errors.New("Token not configured")
+		return errors.New("token not configured")
 	}
-	if b.DbConnStr == "" {
-		return errors.New("DbConnStr not configured")
+	// Validate the database is setup correctly
+	if b.MongoDatabase != nil {
+		err = b.MongoDatabase.Validate()
+	}
+	if err != nil {
+		return err
+	}
+
+	// We should have a database setup by now
+	var db BotDatabase
+	db, err = b.Database()
+	if err != nil {
+		return err
+	}
+	if db == nil {
+		return errors.New("unable to determine bot database")
+	}
+	return nil
+}
+
+func (b *DiscordBot) CommandIsEnabled(name string) bool {
+	cmdEnabled := false
+	for _, v := range b.EnabledCommands {
+		if v == name {
+			cmdEnabled = true
+		}
+	}
+	return cmdEnabled
+}
+
+func (b *DiscordBot) GetCommand(cmdName string) (Command, error) {
+	cmd, cmdExists := b.availableCommands[cmdName]
+	if !cmdExists {
+		return nil, errors.New("unable to find command")
+	}
+	if !b.CommandIsEnabled(cmd.Name()) {
+		return nil, fmt.Errorf(cmd.Name(), " is not enabled")
+	}
+	return cmd, nil
+}
+
+func (b *DiscordBot) ParseCommand(cmdStr string) (Command, error) {
+	// if the command contains user ids, they need quotes around them
+	re := regexp.MustCompile(UserIDRegex)
+	userIDs := re.FindAll([]byte(cmdStr), 10)
+	for id := range userIDs {
+		cmdStr = strings.Replace(cmdStr, string(userIDs[id]), fmt.Sprint("\"", string(userIDs[id]), "\""), -1)
+	}
+
+	args, err := shellwords.Parse(cmdStr)
+	if err != nil {
+		return nil, err
+	}
+	cmd, err := b.GetCommand(args[0])
+	if err != nil {
+		return nil, err
+	}
+	fs := cmd.FlagSet()
+	err = fs.Parse(args[1:])
+	if err != nil {
+		return nil, err
+	}
+	return cmd, nil
+}
+
+func NewMessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
+	bot := GetDiscordBot()
+	if m.Author.ID == s.State.User.ID || m.Content[0] != []byte(bot.CommandPrefix)[0] {
+		return
+	}
+	m.Content = m.Content[1:]
+	cmd, err := bot.ParseCommand(m.Content)
+	if err != nil {
+		bot.SendError(err, m.ChannelID, s)
+		return
+	}
+	err = cmd.Run(s, m.Message)
+	if err != nil {
+		bot.SendError(err, m.ChannelID, s)
+	}
+}
+
+func (b *DiscordBot) Initialise() error {
+	// Setup the map of available commands
+	b.availableCommands = make(map[string]Command)
+
+	helpCmd := &HelpCommand{name: "help"}
+	b.availableCommands[helpCmd.Name()] = helpCmd
+	addQuoteCmd := &AddQuoteCommand{name: "addquote"}
+	b.availableCommands[addQuoteCmd.Name()] = addQuoteCmd
+	getQuoteCommand := &GetQuoteCommand{name: "getquote"}
+	b.availableCommands[getQuoteCommand.Name()] = getQuoteCommand
+
+	// Check that all enabled commands are actually commands
+	for i := range b.EnabledCommands {
+		if _, cmdIsAvailable := b.availableCommands[b.EnabledCommands[i]]; !cmdIsAvailable {
+			return fmt.Errorf(b.EnabledCommands[i], " is not a command")
+		}
+	}
+
+	// Setup the discord session
+	var err error
+	b.Session, err = discordgo.New("Bot " + b.Token)
+	if err != nil {
+		return err
+	}
+
+	// Setup the event handlers
+	b.Session.AddHandler(NewMessageHandler)
+
+	// Setup our database
+	db, err := b.Database()
+	if err != nil {
+		return err
+	}
+	err = db.Connect()
+	if err != nil {
+		return err
 	}
 	return nil
 }
