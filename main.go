@@ -9,24 +9,17 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/ashketchupppp/discord-bot/bot"
-	"github.com/ashketchupppp/discord-bot/db"
 	"github.com/bwmarrin/discordgo"
 )
 
 var (
 	configPath        string
 	defaultConfigPath = "./.bot.conf.json"
-	defaultConfig     = &Config{
+	defaultConfig     = &DiscordBot{
 		Token:     "CHANGE ME",
-		DbConnStr: "mongodb://localhost:27017",
+		DbConnStr: "CHANGE ME",
 	}
 )
-
-type Config struct {
-	Token     string
-	DbConnStr string
-}
 
 func init() {
 	flag.StringVar(&configPath, "configPath", defaultConfigPath, "Path to the configuration file.")
@@ -35,9 +28,9 @@ func init() {
 func main() {
 	flag.Parse()
 	// look for configuration file and read it
-	fileBytes, err := ioutil.ReadFile(configPath)
+	file, err := os.Open(configPath)
 	if err != nil {
-		fmt.Print("Unable to find the config file at '", configPath, "'. Creating a new one in '", defaultConfigPath, "'")
+		fmt.Println("Unable to find the config file at '", configPath, "'. Creating a new one in '", defaultConfigPath, "'")
 		defaultConfigStr, _ := json.Marshal(defaultConfig)
 		e := ioutil.WriteFile(defaultConfigPath, defaultConfigStr, 0)
 		if e != nil {
@@ -46,27 +39,32 @@ func main() {
 		return
 	}
 
-	var conf *Config
-	err = json.Unmarshal(fileBytes, &conf)
+	// We have a config file, read it and validate the discordBot is setup correctly
+	var discordBot *DiscordBot
+	err = discordBot.Load(file)
+	if err != nil {
+		panic(err.Error())
+	}
+	err = discordBot.Validate()
 	if err != nil {
 		panic(err.Error())
 	}
 
 	// Establish mongodb connection
-	db, err := db.NewBotDB(conf.DbConnStr)
+	db, err := NewBotDB(discordBot.DbConnStr)
 	if err != nil {
 		panic(err)
 	}
-	bot.SetDatabase(db)
+	SetDatabase(db)
 
 	// Establish discord bot connection
-	session, err := discordgo.New("Bot " + conf.Token)
+	session, err := discordgo.New("Bot " + discordBot.Token)
 	if err != nil {
 		panic(err)
 	}
 
 	// Setup discord event handlers
-	session.AddHandler(bot.NewMessageHandler)
+	session.AddHandler(NewMessageHandler)
 
 	err = session.Open()
 	if err != nil {

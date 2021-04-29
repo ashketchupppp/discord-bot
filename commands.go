@@ -1,4 +1,4 @@
-package bot
+package main
 
 import (
 	"errors"
@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ashketchupppp/discord-bot/db"
 	"github.com/bwmarrin/discordgo"
 	"github.com/mattn/go-shellwords"
 )
@@ -24,7 +23,7 @@ type Command interface {
 var (
 	Commands      map[string]Command
 	CommandPrefix byte
-	botDatabase   *db.BotDB
+	botDatabase   *BotDB
 )
 
 func init() {
@@ -87,7 +86,7 @@ func NewMessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 }
 
-func SetDatabase(db *db.BotDB) {
+func SetDatabase(db *BotDB) {
 	botDatabase = db
 }
 
@@ -158,7 +157,7 @@ func (cmd *AddQuoteCommand) Run(s *discordgo.Session, m *discordgo.Message) erro
 	if err != nil {
 		return errors.New("unable to find that user")
 	}
-	botDatabase.AddQuote(db.Quote{UserID: cmd.userID, Quote: cmd.quote})
+	botDatabase.AddQuote(Quote{UserID: cmd.userID, Quote: cmd.quote})
 	sendMessage(fmt.Sprint("Added a new quote for ", user.Mention()), m.ChannelID, s)
 	if cmd.quoteChannel != "" {
 		sendMessage(fmt.Sprint("```", cmd.quote, "```", " - ", user.Mention()), cmd.quoteChannel, s)
