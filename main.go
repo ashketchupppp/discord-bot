@@ -22,6 +22,9 @@ var (
 			QuoteCollection: "quotes",
 			ConnStr:         "CHANGE ME",
 		},
+		Settings: map[string]string{
+			"quotechannel": "CHANGE ME",
+		},
 		EnabledCommands: []string{
 			"help",
 			"addquote",
