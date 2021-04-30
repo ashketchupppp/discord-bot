@@ -19,7 +19,7 @@ jobs:
         go-version: 1.15
 
     - name: Build
-      run: go build -v ./... && ls
+      run: go build -v ./ && ls
       
     - uses: actions/upload-artifact@v2
       with:
@@ -37,7 +37,7 @@ jobs:
         go-version: 1.15
 
     - name: Build
-      run: go build -v ./... && dir
+      run: go build -v ./ && dir
       
     - uses: actions/upload-artifact@v2
       with:
