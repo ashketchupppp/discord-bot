@@ -8,25 +8,31 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
-	"github.com/ashketchupppp/discord-bot/bot"
-	"github.com/ashketchupppp/discord-bot/db"
-	"github.com/bwmarrin/discordgo"
 )
+
+var singleDiscordBot = &DiscordBot{}
 
 var (
 	configPath        string
 	defaultConfigPath = "./.bot.conf.json"
-	defaultConfig     = &Config{
-		Token:     "CHANGE ME",
-		DbConnStr: "mongodb://localhost:27017",
+	defaultConfig     = &DiscordBot{
+		Token: "CHANGE ME",
+		MongoDatabase: &MongoDB{
+			DBName:          "discordbot",
+			QuoteCollection: "quotes",
+			ConnStr:         "CHANGE ME",
+		},
+		Settings: map[string]string{
+			"quotechannel": "CHANGE ME",
+		},
+		EnabledCommands: []string{
+			"help",
+			"addquote",
+			"getquote",
+		},
+		CommandPrefix: "$",
 	}
 )
-
-type Config struct {
-	Token     string
-	DbConnStr string
-}
 
 func init() {
 	flag.StringVar(&configPath, "configPath", defaultConfigPath, "Path to the configuration file.")
@@ -35,9 +41,9 @@ func init() {
 func main() {
 	flag.Parse()
 	// look for configuration file and read it
-	fileBytes, err := ioutil.ReadFile(configPath)
+	file, err := os.Open(configPath)
 	if err != nil {
-		fmt.Print("Unable to find the config file at '", configPath, "'. Creating a new one in '", defaultConfigPath, "'")
+		fmt.Println("Unable to find the config file at '", configPath, "'. Creating a new one in '", defaultConfigPath, "'")
 		defaultConfigStr, _ := json.Marshal(defaultConfig)
 		e := ioutil.WriteFile(defaultConfigPath, defaultConfigStr, 0)
 		if e != nil {
@@ -46,29 +52,23 @@ func main() {
 		return
 	}
 
-	var conf *Config
-	err = json.Unmarshal(fileBytes, &conf)
+	// We have a config file, read it and validate the discordBot is setup correctly
+	err = singleDiscordBot.Load(file)
+	if err != nil {
+		panic(err.Error())
+	}
+	err = singleDiscordBot.Validate()
 	if err != nil {
 		panic(err.Error())
 	}
 
-	// Establish mongodb connection
-	db, err := db.NewBotDB(conf.DbConnStr)
-	if err != nil {
-		panic(err)
-	}
-	bot.SetDatabase(db)
-
-	// Establish discord bot connection
-	session, err := discordgo.New("Bot " + conf.Token)
+	// Initialise our discord bot
+	err = singleDiscordBot.Initialise()
 	if err != nil {
 		panic(err)
 	}
 
-	// Setup discord event handlers
-	session.AddHandler(bot.NewMessageHandler)
-
-	err = session.Open()
+	err = singleDiscordBot.Connect()
 	if err != nil {
 		panic(err)
 	}
@@ -80,5 +80,13 @@ func main() {
 	<-sc
 
 	// Cleanly close down the Discord session.
-	session.Close()
+	singleDiscordBot.Disconnect()
+}
+
+// Returns the discord bot currently in use
+// This is needed for things like discord event handlers which need access to the
+// SingleDiscordBot struct, but can't be passed extra function parameters due to the limitation
+// discordgo places on discord event handlers.
+func GetDiscordBot() *DiscordBot {
+	return singleDiscordBot
 }
