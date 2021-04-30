@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -87,28 +86,27 @@ func (b *DiscordBot) GetSetting(name string) (string, error) {
 
 // Reads reader r and attempts to decode it as JSON.
 // Any JSON keys that aren't struct fields (and vice versa) will be ignored
+// Also creates the command objects and puts them in the availableCommands map
 func (b *DiscordBot) Load(r io.Reader) error {
 	decoder := json.NewDecoder(r)
 	err := decoder.Decode(&b)
 	if err != nil {
 		return err
 	}
+	b.SetupAvailableCommands()
 	return nil // success!
 }
 
-func (b *DiscordBot) validateSettings() error {
-	// Validate the values in settings are setup correctly
-	val, err := b.GetSetting("quotechannel")
-	if err == nil {
-		_, err = strconv.Atoi(val)
-		if err != nil {
-			return fmt.Errorf("the setting quotechannel must be an integer")
-		}
-		if len(val) != 18 {
-			return fmt.Errorf("the setting quotechannel must be of length 18")
-		}
-	}
-	return nil
+// Populates the availableCommands map with empty command objects
+func (b *DiscordBot) SetupAvailableCommands() {
+	b.availableCommands = make(map[string]Command)
+
+	helpCmd := &HelpCommand{name: "help"}
+	b.availableCommands[helpCmd.Name()] = helpCmd
+	addQuoteCmd := &AddQuoteCommand{name: "addquote"}
+	b.availableCommands[addQuoteCmd.Name()] = addQuoteCmd
+	getQuoteCommand := &GetQuoteCommand{name: "getquote"}
+	b.availableCommands[getQuoteCommand.Name()] = getQuoteCommand
 }
 
 // Checks the values in b to see if b is setup correctly,
@@ -119,10 +117,14 @@ func (b *DiscordBot) Validate() error {
 		return errors.New("token not configured")
 	}
 
-	// validate the stuff in the section "settings"
-	err = b.validateSettings()
-	if err != nil {
-		return err
+	// get the commands to validate anything they need to
+	for i := range b.EnabledCommands {
+		if cmd, cmdIsAvailable := b.availableCommands[b.EnabledCommands[i]]; cmdIsAvailable {
+			err = cmd.Validate()
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	// Validate the database is setup correctly
@@ -208,16 +210,6 @@ func NewMessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func (b *DiscordBot) Initialise() error {
-	// Setup the map of available commands
-	b.availableCommands = make(map[string]Command)
-
-	helpCmd := &HelpCommand{name: "help"}
-	b.availableCommands[helpCmd.Name()] = helpCmd
-	addQuoteCmd := &AddQuoteCommand{name: "addquote"}
-	b.availableCommands[addQuoteCmd.Name()] = addQuoteCmd
-	getQuoteCommand := &GetQuoteCommand{name: "getquote"}
-	b.availableCommands[getQuoteCommand.Name()] = getQuoteCommand
-
 	// Check that all enabled commands are actually commands
 	for i := range b.EnabledCommands {
 		if _, cmdIsAvailable := b.availableCommands[b.EnabledCommands[i]]; !cmdIsAvailable {

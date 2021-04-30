@@ -29,6 +29,9 @@ func (cmd *GetQuoteCommand) Help() string {
 	bot := GetDiscordBot()
 	return fmt.Sprint(bot.CommandPrefix, cmd.Name(), ` -user @user`)
 }
+func (cmd *GetQuoteCommand) Validate() error {
+	return nil
+}
 
 func (cmd *GetQuoteCommand) Run(s *discordgo.Session, m *discordgo.Message) error {
 	db, err := GetDiscordBot().Database()

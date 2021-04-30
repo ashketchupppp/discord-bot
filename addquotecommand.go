@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"strconv"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -31,6 +32,20 @@ func (cmd *AddQuoteCommand) FlagSet() flag.FlagSet {
 func (cmd *AddQuoteCommand) Help() string {
 	bot := GetDiscordBot()
 	return fmt.Sprint(bot.CommandPrefix, cmd.Name(), " -user @User -quote \"quote\"")
+}
+func (cmd *AddQuoteCommand) Validate() error {
+	bot := GetDiscordBot()
+	val, err := bot.GetSetting("quotechannel")
+	if err == nil {
+		_, err = strconv.Atoi(val)
+		if err != nil {
+			return fmt.Errorf("the setting quotechannel must be an integer")
+		}
+		if len(val) != 18 {
+			return fmt.Errorf("the setting quotechannel must be of length 18")
+		}
+	}
+	return nil
 }
 
 func (cmd *AddQuoteCommand) Run(s *discordgo.Session, m *discordgo.Message) error {

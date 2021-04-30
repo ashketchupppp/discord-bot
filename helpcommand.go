@@ -30,6 +30,10 @@ func (cmd *HelpCommand) Help() string {
 	helpMessage += "```"
 	return helpMessage
 }
+func (cmd *HelpCommand) Validate() error {
+	return nil
+}
+
 func (cmd *HelpCommand) Run(s *discordgo.Session, m *discordgo.Message) error {
 	bot := GetDiscordBot()
 	bot.SendMessage(cmd.Help(), m.ChannelID, s)
