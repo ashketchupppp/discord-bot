@@ -16,3 +16,4 @@
 # vendor/
 .bot.conf.json
 __debug_bin
+discord-bot*

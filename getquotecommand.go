@@ -58,7 +58,7 @@ func (cmd *GetQuoteCommand) Run(s *discordgo.Session, m *discordgo.Message) erro
 	bot := GetDiscordBot()
 	r := rand.New(rand.NewSource(time.Now().Unix()))
 	quoteNum := r.Int() % len(quotes)
-	bot.SendMessage(fmt.Sprint("```", quotes[quoteNum].Quote, "``` from ", user.Mention()), m.ChannelID, s)
+	bot.SendMessage(fmt.Sprint("```", quotes[quoteNum].Quote, "``` from ", user.Mention(), ", circa. `", quotes[quoteNum].Time, "`"), m.ChannelID, s)
 
 	return nil
 }

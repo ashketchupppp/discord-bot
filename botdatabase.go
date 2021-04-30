@@ -7,6 +7,7 @@ type BotDatabase interface {
 }
 
 type Quote struct {
-	UserID string
-	Quote  string
+	Time  string
+	User  string
+	Quote string
 }
