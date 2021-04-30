@@ -20,8 +20,6 @@ jobs:
 
     - name: Build
       run: go build -v ./...
-      
-    - name: LS
       run: ls
       
     - uses: actions/upload-artifact@v2
@@ -41,8 +39,6 @@ jobs:
 
     - name: Build
       run: go build -v ./...
-      
-    - name: LS
       run: dir
       
     - uses: actions/upload-artifact@v2
