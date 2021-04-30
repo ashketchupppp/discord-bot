@@ -54,8 +54,8 @@ func (cmd *AddQuoteCommand) Run(s *discordgo.Session, m *discordgo.Message) erro
 	bot := GetDiscordBot()
 	db.AddQuote(Quote{UserID: cmd.userID, Quote: cmd.quote})
 	bot.SendMessage(fmt.Sprint("Added a new quote for ", user.Mention()), m.ChannelID, s)
-	if cmd.quoteChannel != "" {
-		bot.SendMessage(fmt.Sprint("```", cmd.quote, "```", " - ", user.Mention()), cmd.quoteChannel, s)
+	if qchannel, err := bot.GetSetting("quotechannel"); err == nil {
+		bot.SendMessage(fmt.Sprint("```", cmd.quote, "```", " from ", user.Mention()), qchannel, s)
 	}
 	return nil
 }

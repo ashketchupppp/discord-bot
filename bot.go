@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -33,6 +34,7 @@ type DiscordBot struct {
 	MongoDatabase *MongoDB
 	CommandPrefix string
 
+	Settings          map[string]string
 	EnabledCommands   []string
 	availableCommands map[string]Command
 }
@@ -75,6 +77,14 @@ func (b *DiscordBot) Database() (BotDatabase, error) {
 	return nil, errors.New("unable to determine database to use")
 }
 
+func (b *DiscordBot) GetSetting(name string) (string, error) {
+	if val, exists := b.Settings[name]; exists {
+		return val, nil
+	} else {
+		return "", fmt.Errorf(name, " has not been set")
+	}
+}
+
 // Reads reader r and attempts to decode it as JSON.
 // Any JSON keys that aren't struct fields (and vice versa) will be ignored
 func (b *DiscordBot) Load(r io.Reader) error {
@@ -86,6 +96,21 @@ func (b *DiscordBot) Load(r io.Reader) error {
 	return nil // success!
 }
 
+func (b *DiscordBot) validateSettings() error {
+	// Validate the values in settings are setup correctly
+	val, err := b.GetSetting("quotechannel")
+	if err == nil {
+		_, err = strconv.Atoi(val)
+		if err != nil {
+			return fmt.Errorf("the setting quotechannel must be an integer")
+		}
+		if len(val) != 18 {
+			return fmt.Errorf("the setting quotechannel must be of length 18")
+		}
+	}
+	return nil
+}
+
 // Checks the values in b to see if b is setup correctly,
 // all Validatable objects the DiscordBot stores will also be validated
 func (b *DiscordBot) Validate() error {
@@ -93,6 +118,13 @@ func (b *DiscordBot) Validate() error {
 	if b.Token == "" {
 		return errors.New("token not configured")
 	}
+
+	// validate the stuff in the section "settings"
+	err = b.validateSettings()
+	if err != nil {
+		return err
+	}
+
 	// Validate the database is setup correctly
 	if b.MongoDatabase != nil {
 		err = b.MongoDatabase.Validate()
@@ -135,7 +167,7 @@ func (b *DiscordBot) GetCommand(cmdName string) (Command, error) {
 }
 
 func (b *DiscordBot) ParseCommand(cmdStr string) (Command, error) {
-	// if the command contains user ids, they need quotes around them
+	// if the command contains user ids (the "@Username" string), they need quotes around them
 	re := regexp.MustCompile(UserIDRegex)
 	userIDs := re.FindAll([]byte(cmdStr), 10)
 	for id := range userIDs {
