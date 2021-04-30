@@ -55,9 +55,16 @@ jobs:
         repo: ${{github.repository}}
         path: ./
         
+    - name: maketag
+      uses: anothrNick/github-tag-action@1.26.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WITH_V: true
+        
     - name: Release
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: ${{ steps.maketag.outputs.new_tag }}
         files: windows-binary/discord-bot.exe | 
                linux-binary/discord-bot
       env:
