@@ -53,7 +53,6 @@ jobs:
       with:
         github_token: ${{github.token}}
         repo: ${{github.repository}}
-        name: windows-binary, linux-binary
         path: ./
         
     - name: Release
