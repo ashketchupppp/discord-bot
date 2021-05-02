@@ -13,29 +13,32 @@ import (
 var singleDiscordBot = &DiscordBot{}
 
 var (
-	configPath        string
-	defaultConfigPath = "./.bot.conf.json"
-	defaultConfig     = &DiscordBot{
-		Token: "CHANGE ME",
+	configPath    string
+	defaultConfig = &DiscordBot{
+		Token: DefaultBotToken,
 		MongoDatabase: &MongoDB{
-			DBName:          "discordbot",
-			QuoteCollection: "quotes",
-			ConnStr:         "CHANGE ME",
+			DBName:          DefaultMongoDBName,
+			QuoteCollection: DefaultMongoDBQuoteCollection,
+			ConnStr:         DefaultMongoDBConnStr,
 		},
 		Settings: map[string]string{
-			"quotechannel": "CHANGE ME",
+			QuoteChannelSettingName: DefaultQuoteChannel,
+			LeaveChannelSettingName: DefaultLeaveMessageChannel,
+		},
+		EnabledFeatures: []string{
+			LeaveMessageFeatureName,
 		},
 		EnabledCommands: []string{
-			"help",
-			"addquote",
-			"getquote",
+			HelpCmdName,
+			AddQuoteCmdName,
+			GetQuoteCmdName,
 		},
-		CommandPrefix: "$",
+		CommandPrefix: DefaultCommandPrefix,
 	}
 )
 
 func init() {
-	flag.StringVar(&configPath, "configPath", defaultConfigPath, "Path to the configuration file.")
+	flag.StringVar(&configPath, ConfigPathFlagName, DefaultConfigPath, "Path to the configuration file.")
 }
 
 func main() {
@@ -43,9 +46,9 @@ func main() {
 	// look for configuration file and read it
 	file, err := os.Open(configPath)
 	if err != nil {
-		fmt.Println("Unable to find the config file at '", configPath, "'. Creating a new one in '", defaultConfigPath, "'")
+		fmt.Println("Unable to find the config file at '", configPath, "'. Creating a new one in '", DefaultConfigPath, "'")
 		defaultConfigStr, _ := json.Marshal(defaultConfig)
-		e := ioutil.WriteFile(defaultConfigPath, defaultConfigStr, 0)
+		e := ioutil.WriteFile(DefaultConfigPath, defaultConfigStr, 0)
 		if e != nil {
 			panic(e)
 		}

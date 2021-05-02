@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"regexp"
 	"strings"
 
@@ -16,10 +17,27 @@ var (
 	UserIDRegex = `<@!(\d{18})>`
 )
 
+var (
+	availableCommands map[string]Command
+	availableFeatures []string
+)
+
+func init() {
+	availableCommands = make(map[string]Command)
+
+	availableCommands[HelpCmdName] = &HelpCommand{name: HelpCmdName}
+	availableCommands[AddQuoteCmdName] = &AddQuoteCommand{name: AddQuoteCmdName}
+	availableCommands[GetQuoteCmdName] = &GetQuoteCommand{name: GetQuoteCmdName}
+
+	availableFeatures = []string{
+		LeaveMessageFeatureName,
+	}
+
+}
+
 type Bot interface {
 	Connect() error
 	Disconnect() error
-	RegisterListener(s *discordgo.Session, m *discordgo.MessageCreate) error
 	SendMessage(c string, msg string) error
 	Database() *BotDatabase
 	ParseCommand() (*Command, error)
@@ -33,9 +51,9 @@ type DiscordBot struct {
 	MongoDatabase *MongoDB
 	CommandPrefix string
 
-	Settings          map[string]string
-	EnabledCommands   []string
-	availableCommands map[string]Command
+	Settings        map[string]string
+	EnabledCommands []string
+	EnabledFeatures []string
 }
 
 // Closes the discord session
@@ -48,11 +66,6 @@ func (d *DiscordBot) Disconnect() error {
 func (b *DiscordBot) Connect() error {
 	err := b.Session.Open()
 	return err
-}
-
-// Registers a function handler with the discord session
-func (b *DiscordBot) RegisterHandler(handler func(s *discordgo.Session, m *discordgo.MessageCreate)) {
-	b.Session.AddHandler(handler)
 }
 
 func (b *DiscordBot) SendError(e error, chanID string, s *discordgo.Session) {
@@ -93,20 +106,7 @@ func (b *DiscordBot) Load(r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	b.SetupAvailableCommands()
 	return nil // success!
-}
-
-// Populates the availableCommands map with empty command objects
-func (b *DiscordBot) SetupAvailableCommands() {
-	b.availableCommands = make(map[string]Command)
-
-	helpCmd := &HelpCommand{name: "help"}
-	b.availableCommands[helpCmd.Name()] = helpCmd
-	addQuoteCmd := &AddQuoteCommand{name: "addquote"}
-	b.availableCommands[addQuoteCmd.Name()] = addQuoteCmd
-	getQuoteCommand := &GetQuoteCommand{name: "getquote"}
-	b.availableCommands[getQuoteCommand.Name()] = getQuoteCommand
 }
 
 // Checks the values in b to see if b is setup correctly,
@@ -117,13 +117,33 @@ func (b *DiscordBot) Validate() error {
 		return errors.New("token not configured")
 	}
 
+	// Check that all enabled commands are actually commands
+	for i := range b.EnabledCommands {
+		if _, cmdIsAvailable := availableCommands[b.EnabledCommands[i]]; !cmdIsAvailable {
+			return fmt.Errorf(b.EnabledCommands[i], " is not a command")
+		}
+	}
+
 	// get the commands to validate anything they need to
 	for i := range b.EnabledCommands {
-		if cmd, cmdIsAvailable := b.availableCommands[b.EnabledCommands[i]]; cmdIsAvailable {
+		if cmd, cmdIsAvailable := availableCommands[b.EnabledCommands[i]]; cmdIsAvailable {
 			err = cmd.Validate()
 			if err != nil {
 				return err
 			}
+		}
+	}
+
+	// check that all enabled features actually exist
+	for i := range b.EnabledFeatures {
+		featureExists := false
+		for _, y := range availableFeatures {
+			if y == b.EnabledFeatures[i] {
+				featureExists = true
+			}
+		}
+		if !featureExists {
+			return fmt.Errorf(b.EnabledFeatures[i], " is not a feature, it must be one of ", availableFeatures)
 		}
 	}
 
@@ -158,7 +178,7 @@ func (b *DiscordBot) CommandIsEnabled(name string) bool {
 }
 
 func (b *DiscordBot) GetCommand(cmdName string) (Command, error) {
-	cmd, cmdExists := b.availableCommands[cmdName]
+	cmd, cmdExists := availableCommands[cmdName]
 	if !cmdExists {
 		return nil, errors.New("unable to find command")
 	}
@@ -192,31 +212,7 @@ func (b *DiscordBot) ParseCommand(cmdStr string) (Command, error) {
 	return cmd, nil
 }
 
-func NewMessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
-	bot := GetDiscordBot()
-	if m.Author.ID == s.State.User.ID || m.Content[0] != []byte(bot.CommandPrefix)[0] {
-		return
-	}
-	m.Content = m.Content[1:]
-	cmd, err := bot.ParseCommand(m.Content)
-	if err != nil {
-		bot.SendError(err, m.ChannelID, s)
-		return
-	}
-	err = cmd.Run(s, m.Message)
-	if err != nil {
-		bot.SendError(err, m.ChannelID, s)
-	}
-}
-
 func (b *DiscordBot) Initialise() error {
-	// Check that all enabled commands are actually commands
-	for i := range b.EnabledCommands {
-		if _, cmdIsAvailable := b.availableCommands[b.EnabledCommands[i]]; !cmdIsAvailable {
-			return fmt.Errorf(b.EnabledCommands[i], " is not a command")
-		}
-	}
-
 	// Setup the discord session
 	var err error
 	b.Session, err = discordgo.New("Bot " + b.Token)
@@ -226,6 +222,13 @@ func (b *DiscordBot) Initialise() error {
 
 	// Setup the event handlers
 	b.Session.AddHandler(NewMessageHandler)
+	b.Session.AddHandler(LeaveMessageHandler)
+
+	for f := range b.EnabledFeatures {
+		if b.EnabledFeatures[f] == LeaveMessageFeatureName {
+			// b.Session.AddHandler(LeaveMessageHandler)
+		}
+	}
 
 	// Setup our database
 	db, err := b.Database()
@@ -237,4 +240,32 @@ func (b *DiscordBot) Initialise() error {
 		return err
 	}
 	return nil
+}
+
+func LeaveMessageHandler(s *discordgo.Session, m *discordgo.GuildMemberRemove) {
+	bot := GetDiscordBot()
+	leaveChannel, err := bot.GetSetting(LeaveChannelSettingName)
+	if err != nil {
+		log.Print(err.Error())
+	}
+	bot.SendMessage(fmt.Sprintf(m.Mention(), " left the server!"), leaveChannel, s)
+}
+
+func NewMessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
+	bot := GetDiscordBot()
+	if m.Author.ID == s.State.User.ID || m.Content[0] != []byte(bot.CommandPrefix)[0] {
+		return
+	}
+	m.Content = m.Content[1:]
+	cmd, err := bot.ParseCommand(m.Content)
+	if err != nil {
+		bot.SendError(err, m.ChannelID, s)
+		log.Print(err.Error())
+		return
+	}
+	err = cmd.Run(s, m.Message)
+	if err != nil {
+		bot.SendError(err, m.ChannelID, s)
+		log.Print(err.Error())
+	}
 }
