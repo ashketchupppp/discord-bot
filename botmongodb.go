@@ -47,7 +47,7 @@ func (m *MongoDB) AddQuote(q Quote) error {
 
 func (m *MongoDB) GetQuotes(userID string) ([]Quote, error) {
 	collection := m.Database(m.DBName).Collection(m.QuoteCollection)
-	filter := bson.D{}
+	filter := bson.D{{"user", userID}}
 	cursor, err := collection.Find(context.TODO(), filter)
 	if err != nil {
 		return nil, err
