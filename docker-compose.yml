@@ -5,10 +5,7 @@ services:
     ports:
       - 27017:27017
     volumes:
-      - mongodb_data_container:/data/db
+      - /var/lib/mongodb:/data/db
   testbot2:
     build: .
     command: -configPath config/testbot2.json
-
-volumes:
-  mongodb_data_container:
