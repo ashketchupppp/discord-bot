@@ -1,0 +1,21 @@
+{
+    "Token":"CHANGEME",
+    "MongoDatabase":{
+        "ConnStr":"mongodb://mongodb_container:27017",
+        "QuoteCollection":"quotes",
+        "DBName":"discordbot"
+    },
+    "CommandPrefix":"$",
+    "Settings":{
+        "leavemessagechannel":"CHANGEME",
+        "quotechannel":"CHANGEME"
+    },
+    "EnabledCommands":[
+        "help",
+        "addquote",
+        "getquote"
+    ],
+    "EnabledFeatures":[
+        "leavemessage"
+    ]
+}
