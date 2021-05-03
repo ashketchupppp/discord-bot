@@ -57,12 +57,12 @@ func main() {
 	}
 
 	// We have a config file, read it and validate the discordBot is setup correctly
-	log.Println(fmt.Sprint("loading ", file))
+	log.Println(fmt.Sprint("loading ", file.Name()))
 	err = singleDiscordBot.Load(file)
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
-	log.Println(fmt.Sprint("successful loading ", file))
+	log.Println(fmt.Sprint("successful loading ", file.Name()))
 	err = singleDiscordBot.Validate()
 	if err != nil {
 		log.Fatalln(err.Error())
