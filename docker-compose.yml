@@ -1,11 +1,6 @@
 version: '3.7'
 services:
-  mongodbcon:
-    image: mongo:latest
-    ports:
-      - 27017:27017
-    volumes:
-      - /var/lib/mongodb:/data/db
   testbot2:
-    build: .
+    restart: always
+    image: testbot2:latest
     command: -configPath config/testbot2.json
