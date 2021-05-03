@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -46,34 +47,36 @@ func main() {
 	// look for configuration file and read it
 	file, err := os.Open(configPath)
 	if err != nil {
-		fmt.Println("Unable to find the config file at '", configPath, "'. Creating a new one in '", DefaultConfigPath, "'")
+		log.Println("Unable to find the config file at '", configPath, "'. Creating a new one in '", DefaultConfigPath, "'")
 		defaultConfigStr, _ := json.Marshal(defaultConfig)
 		e := ioutil.WriteFile(DefaultConfigPath, defaultConfigStr, 0)
 		if e != nil {
-			panic(e)
+			log.Fatalln(e)
 		}
 		return
 	}
 
 	// We have a config file, read it and validate the discordBot is setup correctly
+	log.Println(fmt.Sprint("loading ", file))
 	err = singleDiscordBot.Load(file)
 	if err != nil {
-		panic(err.Error())
+		log.Fatalln(err.Error())
 	}
+	log.Println(fmt.Sprint("successful loading ", file))
 	err = singleDiscordBot.Validate()
 	if err != nil {
-		panic(err.Error())
+		log.Fatalln(err.Error())
 	}
 
 	// Initialise our discord bot
 	err = singleDiscordBot.Initialise()
 	if err != nil {
-		panic(err)
+		log.Fatalln(err)
 	}
 
 	err = singleDiscordBot.Connect()
 	if err != nil {
-		panic(err)
+		log.Fatalln(err)
 	}
 
 	// Wait here until CTRL-C or other term signal is received.
