@@ -13,3 +13,5 @@ A couple things you'll need for development
 go build main.go     <-- compiles your code
 go run main.go       <-- compiles and runs your code
 ```
+
+The bot is configured using the `.bot.conf.json` file.
